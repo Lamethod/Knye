@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Mon cockpit financier</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -205,6 +206,20 @@ let txModal = null;
 let settingsOpen = false;
 let flashMsg = null; // { type: 'ok'|'error', text }
 
+// --- Google Drive sync ---
+// 1) Créez un projet sur https://console.cloud.google.com, activez "Google Drive API"
+// 2) Configurez l'écran de consentement OAuth (externe), scope: drive.file, statut "Production"
+// 3) Créez un identifiant OAuth "Application Web", ajoutez l'URL où ce fichier est hébergé
+//    comme origine JavaScript autorisée (ex. https://votre-nom.github.io)
+// 4) Collez l'identifiant client ci-dessous, entre guillemets
+const GOOGLE_CLIENT_ID = "384564924902-orr25eool5per2hccck1mjat2i6f98nf.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_FILE_NAME = "mon-cockpit-financier-data.json";
+let driveAccessToken = null;
+let driveFileId = localStorage.getItem("fm_drive_file_id") || null;
+let driveConnected = localStorage.getItem("fm_drive_connected") === "1";
+let driveSyncing = false;
+
 /* ---------------------------------- helpers ---------------------------------- */
 function uid() { return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2); }
 function fmtFCFA(n) { return new Intl.NumberFormat("fr-FR").format(Math.round(Number(n) || 0)) + " FCFA"; }
@@ -247,13 +262,151 @@ function loadState() {
   try { accounts = JSON.parse(localStorage.getItem("fm_accounts") || "[]"); } catch (e) { accounts = []; }
   try { transactions = JSON.parse(localStorage.getItem("fm_transactions") || "[]"); } catch (e) { transactions = []; }
 }
-function saveAccounts() {
+function saveAccountsLocal() {
   try { localStorage.setItem("fm_accounts", JSON.stringify(accounts)); }
   catch (e) { flashMsg = { type: "error", text: "Échec de sauvegarde des comptes (stockage plein ou bloqué)." }; }
 }
-function saveTransactions() {
+function saveTransactionsLocal() {
   try { localStorage.setItem("fm_transactions", JSON.stringify(transactions)); }
   catch (e) { flashMsg = { type: "error", text: "Échec de sauvegarde des transactions (stockage plein ou bloqué)." }; }
+}
+function saveAccounts() { saveAccountsLocal(); if (driveConnected) drivePush(); }
+function saveTransactions() { saveTransactionsLocal(); if (driveConnected) drivePush(); }
+
+/* ---------------------------------- google drive sync ---------------------------------- */
+function driveReady() { return typeof google !== "undefined" && google.accounts && google.accounts.oauth2; }
+
+function initDriveTokenClient(callback) {
+  if (!driveReady()) return null;
+  return google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE, callback });
+}
+
+function connectDrive() {
+  if (GOOGLE_CLIENT_ID.startsWith("REMPLACEZ")) {
+    flashMsg = { type: "error", text: "Il manque votre identifiant Google (Client ID) dans le code — voir les instructions." };
+    render(); return;
+  }
+  const client = initDriveTokenClient(async (resp) => {
+    if (resp.error) { flashMsg = { type: "error", text: "Connexion Google refusée ou annulée." }; render(); return; }
+    driveAccessToken = resp.access_token;
+    driveConnected = true;
+    localStorage.setItem("fm_drive_connected", "1");
+    await driveInitialSync();
+    render();
+  });
+  if (!client) { flashMsg = { type: "error", text: "Le module Google n'est pas encore chargé — réessayez dans un instant." }; render(); return; }
+  client.requestAccessToken({ prompt: "consent" });
+}
+
+function trySilentDriveReauth() {
+  if (!driveConnected || GOOGLE_CLIENT_ID.startsWith("REMPLACEZ")) return;
+  const client = initDriveTokenClient(async (resp) => {
+    if (resp.error) return; // échec silencieux : l'utilisateur devra reconnecter manuellement
+    driveAccessToken = resp.access_token;
+    await drivePull();
+    render();
+  });
+  if (client) client.requestAccessToken({ prompt: "" });
+}
+
+async function driveFindFile() {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name%3D'${DRIVE_FILE_NAME}'+and+trashed%3Dfalse&spaces=drive&fields=files(id,name,modifiedTime)`,
+    { headers: { Authorization: "Bearer " + driveAccessToken } }
+  );
+  const data = await res.json();
+  return (data.files && data.files[0]) || null;
+}
+
+async function driveCreateFile(content) {
+  const boundary = "fmboundary";
+  const metadata = { name: DRIVE_FILE_NAME, mimeType: "application/json" };
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + driveAccessToken, "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+  const data = await res.json();
+  return data.id;
+}
+
+async function driveUpdateFile(fileId, content) {
+  await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + driveAccessToken, "Content-Type": "application/json" },
+    body: content,
+  });
+}
+
+async function driveDownloadFile(fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: "Bearer " + driveAccessToken },
+  });
+  return res.json();
+}
+
+async function driveInitialSync() {
+  driveSyncing = true;
+  try {
+    const existing = await driveFindFile();
+    const hasLocalData = accounts.length > 0 || transactions.length > 0;
+    if (existing) {
+      driveFileId = existing.id;
+      localStorage.setItem("fm_drive_file_id", driveFileId);
+      if (hasLocalData) {
+        const useRemote = confirm(
+          "Des données existent déjà sur Google Drive.\nOK = charger celles de Drive (remplace ce téléphone)\nAnnuler = envoyer les données de ce téléphone vers Drive (remplace Drive)"
+        );
+        if (useRemote) { await drivePull(); }
+        else { await driveUpdateFile(driveFileId, JSON.stringify({ accounts, transactions })); }
+      } else {
+        await drivePull();
+      }
+    } else {
+      driveFileId = await driveCreateFile(JSON.stringify({ accounts, transactions }));
+      localStorage.setItem("fm_drive_file_id", driveFileId);
+    }
+    flashMsg = { type: "ok", text: "Connecté à Google Drive." };
+  } catch (e) {
+    flashMsg = { type: "error", text: "Échec de connexion à Google Drive." };
+  }
+  driveSyncing = false;
+}
+
+async function drivePull() {
+  if (!driveFileId || !driveAccessToken) return;
+  try {
+    const remote = await driveDownloadFile(driveFileId);
+    accounts = remote.accounts || [];
+    transactions = remote.transactions || [];
+    saveAccountsLocal(); saveTransactionsLocal();
+  } catch (e) { /* garde les données locales en cas d'échec */ }
+}
+
+async function drivePush() {
+  if (!driveAccessToken) return;
+  try {
+    if (!driveFileId) {
+      driveFileId = await driveCreateFile(JSON.stringify({ accounts, transactions }));
+      localStorage.setItem("fm_drive_file_id", driveFileId);
+    } else {
+      await driveUpdateFile(driveFileId, JSON.stringify({ accounts, transactions }));
+    }
+  } catch (e) {
+    flashMsg = { type: "error", text: "Échec de synchronisation avec Drive (hors-ligne ?)." };
+    render();
+  }
+}
+
+function disconnectDrive() {
+  driveConnected = false; driveAccessToken = null; driveFileId = null;
+  localStorage.removeItem("fm_drive_connected");
+  localStorage.removeItem("fm_drive_file_id");
+  flashMsg = { type: "ok", text: "Déconnecté de Google Drive (les données restent sur ce téléphone)." };
+  closeSettings();
 }
 
 /* ---------------------------------- computed ---------------------------------- */
@@ -534,6 +687,14 @@ function renderSettingsModal() {
     <div class="fm-modal" onclick="event.stopPropagation()">
       <div class="fm-modal-head"><h2>Paramètres</h2><button class="fm-icon-btn" onclick="closeSettings()">✕</button></div>
       <div class="fm-settings-row">
+        <div>
+          <h2 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 6px;">Google Drive</h2>
+          <p class="fm-muted" style="margin:0 0 10px;">${driveConnected ? "Connecté — vos données se synchronisent automatiquement entre vos appareils." : "Non connecté — les données restent seulement sur ce téléphone."}</p>
+          ${driveConnected
+            ? `<button class="fm-btn-secondary" onclick="disconnectDrive()">Déconnecter Drive</button>`
+            : `<button class="fm-btn-primary" onclick="connectDrive()">🔗 Connecter Google Drive</button>`}
+        </div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:4px 0;width:100%;">
         <button class="fm-btn-secondary" onclick="exportData()">⬇ Exporter mes données (JSON)</button>
         <label class="fm-btn-secondary" style="text-align:center; display:block;">⬆ Importer un fichier JSON
           <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])">
@@ -581,8 +742,13 @@ function resetAllData() {
 }
 
 /* ---------------------------------- init ---------------------------------- */
+function waitForGoogleAndInit(retries) {
+  if (driveReady()) { if (driveConnected) trySilentDriveReauth(); }
+  else if (retries > 0) { setTimeout(() => waitForGoogleAndInit(retries - 1), 300); }
+}
 loadState();
 render();
+waitForGoogleAndInit(15);
 </script>
 </body>
 </html>
