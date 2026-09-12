@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Mon cockpit financier</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #F4F5F0;
+  --surface: #FFFFFF;
+  --ink: #16241C;
+  --ink-soft: #5B6660;
+  --primary: #1F4D3A;
+  --primary-dark: #12301F;
+  --gold: #C89B3C;
+  --rose: #C1442E;
+  --line: #DDE1D9;
+  --chip: #EAEFE9;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  margin: 0;
+}
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 20px 16px 96px;
+  position: relative;
+}
+.fm-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
+.fm-eyebrow { font-size: 12px; color: var(--ink-soft); margin: 0 0 2px; }
+.fm-header h1 { font-family: 'Fraunces', serif; font-size: 26px; margin: 0; font-weight: 600; }
+.fm-header-right { display: flex; align-items: center; gap: 8px; }
+
+.fm-period { position: relative; }
+.fm-period-btn, .fm-gear-btn {
+  display: flex; align-items: center; gap: 4px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 20px; padding: 7px 12px;
+  font-size: 13px; color: var(--ink); cursor: pointer; font-family: inherit;
+}
+.fm-gear-btn { padding: 7px 10px; }
+.fm-period-menu {
+  position: absolute; right: 0; top: 38px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(20,30,25,0.12);
+  display: flex; flex-direction: column; overflow: hidden; z-index: 20; min-width: 150px;
+}
+.fm-period-menu button { padding: 10px 14px; text-align: left; background: none; border: none; font-size: 13px; color: var(--ink); cursor: pointer; font-family: inherit; }
+.fm-period-menu button:hover { background: var(--chip); }
+
+.fm-banner-error {
+  display: flex; gap: 6px; align-items: center; background: #FBEAE6; color: var(--rose);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px;
+}
+.fm-banner-ok {
+  display: flex; gap: 6px; align-items: center; background: var(--chip); color: var(--primary);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px;
+}
+
+.fm-hero {
+  background: linear-gradient(155deg, var(--primary), var(--primary-dark));
+  color: #F4F5F0; border-radius: 22px; padding: 22px 20px; display: flex; flex-direction: column;
+  gap: 4px; margin-bottom: 16px;
+}
+.fm-hero-label { font-size: 13px; opacity: 0.8; }
+.fm-hero-value { font-family: 'Fraunces', serif; font-size: 34px; font-weight: 700; line-height: 1.1; }
+.fm-hero-sub { font-size: 12.5px; opacity: 0.85; margin-top: 4px; }
+
+.fm-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-bottom: 18px; }
+.fm-stat { display: flex; flex-direction: column; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.fm-stat-label { font-size: 12.5px; color: var(--ink-soft); }
+.fm-stat-value { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; margin-top: 2px; }
+.fm-stat-sub { font-size: 11px; color: var(--ink-soft); margin-top: 1px; }
+.fm-tone-good { color: var(--primary); }
+.fm-tone-bad { color: var(--rose); }
+
+.fm-insight {
+  display: flex; align-items: flex-start; gap: 8px; background: var(--chip);
+  border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--ink); margin-bottom: 18px;
+}
+
+.fm-section { margin-bottom: 22px; }
+.fm-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.fm-section h2 { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; margin: 0; }
+.fm-link { background: none; border: none; color: var(--primary); font-size: 13px; font-weight: 500; cursor: pointer; padding: 0; font-family: inherit; }
+.fm-muted { color: var(--ink-soft); font-size: 13px; }
+
+.fm-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; }
+.fm-bar-name { width: 84px; flex-shrink: 0; color: var(--ink-soft); }
+.fm-bar-track { flex: 1; background: var(--chip); border-radius: 6px; height: 16px; overflow: hidden; }
+.fm-bar-fill { background: var(--primary); height: 100%; border-radius: 6px; }
+.fm-bar-value { width: 78px; flex-shrink: 0; text-align: right; font-weight: 600; }
+
+.fm-tx-list, .fm-account-list { list-style: none; margin: 0; padding: 0; }
+.fm-tx-list li, .fm-account-list li {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 2px;
+  border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.fm-tx-list li:last-child, .fm-account-list li:last-child { border-bottom: none; }
+.fm-tx-title { display: block; font-size: 14px; font-weight: 500; }
+.fm-tx-sub { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 1px; }
+.fm-tx-amount { font-family: 'Fraunces', serif; font-size: 14.5px; font-weight: 600; white-space: nowrap; }
+
+.fm-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px;
+  padding: 40px 20px; color: var(--ink-soft);
+}
+.fm-empty svg { color: var(--ink-soft); }
+.fm-empty h3 { font-family: 'Fraunces', serif; color: var(--ink); font-size: 17px; margin: 4px 0 0; }
+.fm-empty p { font-size: 13.5px; margin: 0; max-width: 260px; }
+.fm-empty .fm-btn-primary { margin-top: 8px; }
+
+.fm-btn-primary {
+  background: var(--primary); color: #fff; border: none; border-radius: 12px;
+  padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.fm-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.fm-btn-danger {
+  background: none; color: var(--rose); border: 1px solid #E8C7BE; border-radius: 12px;
+  padding: 11px 14px; font-size: 13.5px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; font-family: inherit;
+}
+.fm-btn-secondary {
+  background: var(--chip); color: var(--ink); border: none; border-radius: 12px;
+  padding: 11px 14px; font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;
+}
+
+.fm-icon-btn {
+  background: none; border: none; color: var(--ink-soft); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 4px;
+}
+.fm-icon-btn-primary {
+  background: var(--primary); color: #fff; border-radius: 10px; width: 34px; height: 34px;
+}
+.fm-icon-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.fm-fab {
+  position: fixed; bottom: 78px; right: 20px; background: var(--gold);
+  color: var(--primary-dark); border: none; border-radius: 50%; width: 54px; height: 54px;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(20,30,25,0.25);
+  cursor: pointer; z-index: 15;
+}
+
+.fm-nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px;
+  background: var(--surface); border-top: 1px solid var(--line); display: flex; z-index: 10;
+}
+.fm-nav button {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 4px 14px;
+  background: none; border: none; color: var(--ink-soft); font-size: 11px; cursor: pointer; font-family: inherit;
+}
+.fm-nav button.active { color: var(--primary); font-weight: 600; }
+
+.fm-modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,25,20,0.4); display: flex; align-items: flex-end;
+  justify-content: center; z-index: 30;
+}
+.fm-modal {
+  background: var(--surface); width: 100%; max-width: 480px; border-radius: 22px 22px 0 0;
+  max-height: 88vh; overflow-y: auto; padding: 18px 18px 26px;
+}
+.fm-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.fm-modal-head h2 { font-family: 'Fraunces', serif; font-size: 18px; margin: 0; }
+
+.fm-form { display: flex; flex-direction: column; gap: 12px; }
+.fm-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--ink-soft); }
+.fm-form input, .fm-form select, .fm-form textarea {
+  font-family: 'Inter', sans-serif; font-size: 14.5px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; outline: none; width: 100%;
+}
+.fm-form input:focus, .fm-form select:focus, .fm-form textarea:focus { border-color: var(--primary); }
+.fm-error { display: flex; align-items: center; gap: 6px; color: var(--rose); font-size: 12.5px; }
+.fm-form-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; }
+.fm-settings-row { display: flex; flex-direction: column; gap: 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ---------------------------------- constants ---------------------------------- */
+const ACCOUNT_TYPES = ["Compte courant", "Compte épargne", "Mobile money", "Espèces", "Compte investissement"];
+const TX_TYPES = ["Revenu", "Dépense", "Transfert", "Épargne", "Retrait", "Dépôt", "Investissement", "Remboursement crédit", "Frais bancaire"];
+const CATEGORIES_REVENU = ["Salaire", "Prime", "Bonus", "Activité secondaire", "Remboursement reçu", "Autres revenus"];
+const CATEGORIES_DEPENSE = ["Logement", "Eau", "Électricité", "Internet", "Téléphone", "Transport", "Alimentation", "Santé", "Études", "Loisirs", "Shopping", "Abonnements", "Famille", "Voyages", "Autres"];
+const PAYMENT_MODES = ["Espèces", "Carte", "Mobile money", "Virement", "Chèque"];
+const OUTFLOW_TYPES = ["Dépense", "Retrait", "Frais bancaire", "Investissement", "Remboursement crédit"];
+const INFLOW_TYPES = ["Revenu", "Dépôt"];
+const PAIRED_TYPES = ["Transfert", "Épargne"];
+const LIQUID_TYPES = ["Compte courant", "Mobile money", "Espèces"];
+const PERIOD_LABELS = { mois_courant: "Ce mois", mois_dernier: "Mois dernier", annee: "Cette année", tout: "Depuis le début" };
+
+/* ---------------------------------- state ---------------------------------- */
+let accounts = [];
+let transactions = [];
+let tab = "dashboard";
+let period = "mois_courant";
+let periodMenuOpen = false;
+let accountModal = null; // null | {} | account object
+let txModal = null;
+let settingsOpen = false;
+let flashMsg = null; // { type: 'ok'|'error', text }
+
+/* ---------------------------------- helpers ---------------------------------- */
+function uid() { return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2); }
+function fmtFCFA(n) { return new Intl.NumberFormat("fr-FR").format(Math.round(Number(n) || 0)) + " FCFA"; }
+function needsCategory(t) { return t === "Revenu" || t === "Dépense"; }
+function needsDestination(t) { return PAIRED_TYPES.includes(t); }
+function isOutflow(t) { return OUTFLOW_TYPES.includes(t); }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+function accountBalance(account) {
+  let b = Number(account.soldeInitial) || 0;
+  for (const tx of transactions) {
+    const amt = Number(tx.montant) || 0;
+    if (PAIRED_TYPES.includes(tx.type)) {
+      if (tx.compteId === account.id) b -= amt;
+      if (tx.compteDestinationId === account.id) b += amt;
+    } else if (OUTFLOW_TYPES.includes(tx.type)) {
+      if (tx.compteId === account.id) b -= amt;
+    } else if (INFLOW_TYPES.includes(tx.type)) {
+      if (tx.compteId === account.id) b += amt;
+    }
+  }
+  return b;
+}
+
+function periodRange(p) {
+  const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+  if (p === "mois_dernier") return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+  if (p === "annee") return [new Date(y, 0, 1), new Date(y, 11, 31)];
+  if (p === "tout") return [new Date(2000, 0, 1), new Date(2100, 0, 1)];
+  return [new Date(y, m, 1), new Date(y, m + 1, 0)];
+}
+function inRange(dateStr, range) {
+  const d = new Date(dateStr);
+  return d >= range[0] && d <= new Date(range[1].getFullYear(), range[1].getMonth(), range[1].getDate(), 23, 59, 59);
+}
+
+/* ---------------------------------- persistence ---------------------------------- */
+function loadState() {
+  try { accounts = JSON.parse(localStorage.getItem("fm_accounts") || "[]"); } catch (e) { accounts = []; }
+  try { transactions = JSON.parse(localStorage.getItem("fm_transactions") || "[]"); } catch (e) { transactions = []; }
+}
+function saveAccounts() {
+  try { localStorage.setItem("fm_accounts", JSON.stringify(accounts)); }
+  catch (e) { flashMsg = { type: "error", text: "Échec de sauvegarde des comptes (stockage plein ou bloqué)." }; }
+}
+function saveTransactions() {
+  try { localStorage.setItem("fm_transactions", JSON.stringify(transactions)); }
+  catch (e) { flashMsg = { type: "error", text: "Échec de sauvegarde des transactions (stockage plein ou bloqué)." }; }
+}
+
+/* ---------------------------------- computed ---------------------------------- */
+function computeTotals() {
+  const range = periodRange(period);
+  const periodTx = transactions.filter((t) => inRange(t.date, range));
+  const totalCourant = accounts.filter((a) => LIQUID_TYPES.includes(a.type)).reduce((s, a) => s + accountBalance(a), 0);
+  const totalEpargne = accounts.filter((a) => a.type === "Compte épargne").reduce((s, a) => s + accountBalance(a), 0);
+  const totalInvest = accounts.filter((a) => a.type === "Compte investissement").reduce((s, a) => s + accountBalance(a), 0);
+  const revenus = periodTx.filter((t) => t.type === "Revenu").reduce((s, t) => s + t.montant, 0);
+  const depenses = periodTx.filter((t) => t.type === "Dépense").reduce((s, t) => s + t.montant, 0);
+  const epargne = revenus - depenses;
+  const tauxEpargne = revenus > 0 ? (epargne / revenus) * 100 : 0;
+  const parCategorie = {};
+  periodTx.filter((t) => t.type === "Dépense").forEach((t) => {
+    const c = t.categorie || "Autres";
+    parCategorie[c] = (parCategorie[c] || 0) + t.montant;
+  });
+  const catData = Object.entries(parCategorie).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6);
+  const topCat = catData[0];
+  const insight = topCat && depenses > 0 ? `${topCat.name} représente ${Math.round((topCat.value / depenses) * 100)} % de vos dépenses sur la période.` : null;
+  return { totalCourant, totalEpargne, totalInvest, totalDisponible: totalCourant + totalEpargne, revenus, depenses, epargne, tauxEpargne, catData, insight, periodTx };
+}
+
+/* ---------------------------------- rendering ---------------------------------- */
+function render() {
+  const app = document.getElementById("app");
+  const t = computeTotals();
+  app.innerHTML = `
+    <header class="fm-header">
+      <div>
+        <p class="fm-eyebrow">Mon cockpit financier</p>
+        <h1>Bonjour</h1>
+      </div>
+      <div class="fm-header-right">
+        ${tab === "dashboard" ? `
+        <div class="fm-period">
+          <button class="fm-period-btn" onclick="togglePeriodMenu()">${PERIOD_LABELS[period]} ▾</button>
+          ${periodMenuOpen ? `<div class="fm-period-menu">${Object.entries(PERIOD_LABELS).map(([k, v]) => `<button onclick="setPeriod('${k}')">${v}</button>`).join("")}</div>` : ""}
+        </div>` : ""}
+        <button class="fm-gear-btn" onclick="openSettings()" aria-label="Paramètres">⚙</button>
+      </div>
+    </header>
+    ${flashMsg ? `<div class="${flashMsg.type === "error" ? "fm-banner-error" : "fm-banner-ok"}">⚠ ${esc(flashMsg.text)}</div>` : ""}
+    <main id="fm-main"></main>
+    ${accounts.length > 0 ? `<button class="fm-fab" onclick="openTxModal(null)" aria-label="Nouvelle transaction">+</button>` : ""}
+    <nav class="fm-nav">
+      <button class="${tab === "dashboard" ? "active" : ""}" onclick="setTab('dashboard')">📊<span>Tableau de bord</span></button>
+      <button class="${tab === "comptes" ? "active" : ""}" onclick="setTab('comptes')">🏦<span>Comptes</span></button>
+      <button class="${tab === "transactions" ? "active" : ""}" onclick="setTab('transactions')">⇄<span>Transactions</span></button>
+    </nav>
+  `;
+  renderMain(t);
+  if (accountModal !== null) renderAccountModal();
+  if (txModal !== null) renderTxModal();
+  if (settingsOpen) renderSettingsModal();
+}
+
+function renderMain(t) {
+  const main = document.getElementById("fm-main");
+  if (tab === "dashboard") {
+    if (accounts.length === 0) {
+      main.innerHTML = emptyState("💳", "Commencez par un compte", "Ajoutez votre premier compte (bancaire, mobile money ou espèces) pour suivre votre argent.", "Ajouter un compte", "openAccountModal(null)");
+      return;
+    }
+    main.innerHTML = `
+      <div class="fm-hero">
+        <span class="fm-hero-label">Disponible</span>
+        <span class="fm-hero-value">${fmtFCFA(t.totalDisponible)}</span>
+        <span class="fm-hero-sub">Courant ${fmtFCFA(t.totalCourant)} · Épargne ${fmtFCFA(t.totalEpargne)}</span>
+        ${t.totalInvest > 0 ? `<span class="fm-hero-sub">Investissements ${fmtFCFA(t.totalInvest)}</span>` : ""}
+      </div>
+      <div class="fm-stat-grid">
+        ${stat("Revenus", fmtFCFA(t.revenus), "", "good")}
+        ${stat("Dépenses", fmtFCFA(t.depenses), "", "bad")}
+        ${stat("Épargne", fmtFCFA(t.epargne), "Revenus − dépenses", t.epargne >= 0 ? "good" : "bad")}
+        ${stat("Taux d'épargne", t.tauxEpargne.toFixed(0) + " %", "", t.tauxEpargne >= 0 ? "good" : "bad")}
+      </div>
+      ${t.insight ? `<div class="fm-insight">📈 ${esc(t.insight)}</div>` : ""}
+      ${t.catData.length > 0 ? `
+        <section class="fm-section">
+          <h2 style="margin-bottom:10px;">Où part votre argent</h2>
+          ${t.catData.map((c) => barRow(c, t.catData[0].value)).join("")}
+        </section>` : ""}
+      <section class="fm-section">
+        <div class="fm-section-head"><h2>Dernières transactions</h2><button class="fm-link" onclick="setTab('transactions')">Tout voir</button></div>
+        ${renderTxList([...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6))}
+      </section>
+    `;
+  } else if (tab === "comptes") {
+    main.innerHTML = `
+      <section class="fm-section">
+        <div class="fm-section-head"><h2>Vos comptes</h2><button class="fm-icon-btn fm-icon-btn-primary" onclick="openAccountModal(null)">+</button></div>
+        ${accounts.length === 0 ? emptyState("💳", "Aucun compte", "Ajoutez votre premier compte pour commencer.", "Ajouter un compte", "openAccountModal(null)") : `
+          <ul class="fm-account-list">
+            ${accounts.map((a) => `
+              <li onclick="openAccountModal('${a.id}')">
+                <div><span class="fm-tx-title">${esc(a.nom)}</span><span class="fm-tx-sub">${esc(a.type)}${a.institution ? " · " + esc(a.institution) : ""}</span></div>
+                <span class="fm-tx-amount">${fmtFCFA(accountBalance(a))}</span>
+              </li>`).join("")}
+          </ul>`}
+      </section>
+    `;
+  } else if (tab === "transactions") {
+    const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
+    main.innerHTML = `
+      <section class="fm-section">
+        <div class="fm-section-head"><h2>Transactions</h2><button class="fm-icon-btn fm-icon-btn-primary" ${accounts.length === 0 ? "disabled" : ""} onclick="openTxModal(null)">+</button></div>
+        ${accounts.length === 0 ? emptyState("🧾", "Ajoutez d'abord un compte", "Il faut au moins un compte pour enregistrer une transaction.", "Ajouter un compte", "setTab('comptes');openAccountModal(null)")
+          : sorted.length === 0 ? emptyState("🧾", "Aucune transaction", "Enregistrez votre première dépense ou votre premier revenu.", "Ajouter une transaction", "openTxModal(null)")
+          : renderTxList(sorted)}
+      </section>
+    `;
+  }
+}
+
+function stat(label, value, sub, tone) {
+  return `<div class="fm-stat"><span class="fm-stat-label">${esc(label)}</span><span class="fm-stat-value fm-tone-${tone}">${esc(value)}</span>${sub ? `<span class="fm-stat-sub">${esc(sub)}</span>` : ""}</div>`;
+}
+function barRow(c, max) {
+  const pct = max > 0 ? Math.round((c.value / max) * 100) : 0;
+  return `<div class="fm-bar-row"><span class="fm-bar-name">${esc(c.name)}</span><div class="fm-bar-track"><div class="fm-bar-fill" style="width:${pct}%"></div></div><span class="fm-bar-value">${fmtFCFA(c.value)}</span></div>`;
+}
+function renderTxList(list) {
+  if (list.length === 0) return `<p class="fm-muted">Aucune transaction pour l'instant.</p>`;
+  return `<ul class="fm-tx-list">${list.map((tx) => {
+    const acc = accounts.find((a) => a.id === tx.compteId);
+    return `<li onclick="openTxModal('${tx.id}')">
+      <div><span class="fm-tx-title">${esc(tx.categorie || tx.type)}</span><span class="fm-tx-sub">${esc(acc ? acc.nom : "—")} · ${esc(tx.date)}</span></div>
+      <span class="fm-tx-amount fm-tone-${isOutflow(tx.type) ? "bad" : "good"}">${isOutflow(tx.type) ? "−" : "+"}${fmtFCFA(tx.montant)}</span>
+    </li>`;
+  }).join("")}</ul>`;
+}
+function emptyState(icon, title, text, actionLabel, actionOnclick) {
+  return `<div class="fm-empty"><div style="font-size:28px;">${icon}</div><h3>${esc(title)}</h3><p>${esc(text)}</p><button class="fm-btn-primary" onclick="${actionOnclick}">${esc(actionLabel)}</button></div>`;
+}
+
+/* ---------------------------------- tab / period actions ---------------------------------- */
+function setTab(v) { tab = v; periodMenuOpen = false; render(); }
+function togglePeriodMenu() { periodMenuOpen = !periodMenuOpen; render(); }
+function setPeriod(v) { period = v; periodMenuOpen = false; render(); }
+
+/* ---------------------------------- account modal ---------------------------------- */
+function openAccountModal(id) { accountModal = id ? accounts.find((a) => a.id === id) : {}; render(); }
+function closeAccountModal() { accountModal = null; render(); }
+
+function renderAccountModal() {
+  const initial = accountModal && accountModal.id ? accountModal : null;
+  const overlay = document.createElement("div");
+  overlay.className = "fm-modal-overlay";
+  overlay.onclick = closeAccountModal;
+  overlay.innerHTML = `
+    <div class="fm-modal" onclick="event.stopPropagation()">
+      <div class="fm-modal-head"><h2>${initial ? "Modifier le compte" : "Nouveau compte"}</h2><button class="fm-icon-btn" onclick="closeAccountModal()">✕</button></div>
+      <div class="fm-form">
+        <label>Nom du compte<input id="f-nom" value="${esc(initial?.nom || "")}" placeholder="Ex. Compte courant NSIA"></label>
+        <label>Institution<input id="f-institution" value="${esc(initial?.institution || "")}" placeholder="Ex. NSIA Banque"></label>
+        <label>Type de compte<select id="f-type">${ACCOUNT_TYPES.map((t) => `<option ${initial?.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Solde initial (FCFA)<input id="f-solde" type="number" value="${initial?.soldeInitial ?? ""}" placeholder="0"></label>
+        <label>Notes<textarea id="f-notes" rows="2" placeholder="Facultatif">${esc(initial?.notes || "")}</textarea></label>
+        <div id="f-err"></div>
+        <div class="fm-form-actions">
+          ${initial ? `<button class="fm-btn-danger" onclick="deleteAccount('${initial.id}')">🗑 Supprimer</button>` : "<span></span>"}
+          <button class="fm-btn-primary" onclick="submitAccount(${initial ? `'${initial.id}'` : "null"})">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function submitAccount(id) {
+  const nom = document.getElementById("f-nom").value.trim();
+  const solde = document.getElementById("f-solde").value;
+  const errEl = document.getElementById("f-err");
+  if (!nom) { errEl.innerHTML = `<div class="fm-error">⚠ Le nom du compte est requis.</div>`; return; }
+  if (solde === "" || isNaN(Number(solde))) { errEl.innerHTML = `<div class="fm-error">⚠ Le solde initial doit être un nombre.</div>`; return; }
+  const acc = {
+    id: id || uid(),
+    nom, institution: document.getElementById("f-institution").value.trim(),
+    type: document.getElementById("f-type").value, devise: "XOF",
+    soldeInitial: Number(solde),
+    dateCreation: id ? accounts.find((a) => a.id === id).dateCreation : todayStr(),
+    notes: document.getElementById("f-notes").value.trim(),
+  };
+  const idx = accounts.findIndex((a) => a.id === acc.id);
+  if (idx >= 0) accounts[idx] = acc; else accounts.push(acc);
+  saveAccounts();
+  accountModal = null;
+  render();
+}
+function deleteAccount(id) {
+  if (!confirm("Supprimer ce compte ? Les transactions liées resteront dans l'historique.")) return;
+  accounts = accounts.filter((a) => a.id !== id);
+  saveAccounts();
+  accountModal = null;
+  render();
+}
+
+/* ---------------------------------- transaction modal ---------------------------------- */
+function openTxModal(id) { txModal = id ? transactions.find((t) => t.id === id) : {}; render(); }
+function closeTxModal() { txModal = null; render(); }
+function onTxTypeChange() { render(); } // re-render keeps modal open via txModal state below
+
+function renderTxModal() {
+  const initial = txModal && txModal.id ? txModal : null;
+  const currentType = (initial && initial.type) || txModal._type || "Dépense";
+  const overlay = document.createElement("div");
+  overlay.className = "fm-modal-overlay";
+  overlay.onclick = closeTxModal;
+  const categoryList = currentType === "Revenu" ? CATEGORIES_REVENU : currentType === "Dépense" ? CATEGORIES_DEPENSE : null;
+  overlay.innerHTML = `
+    <div class="fm-modal" onclick="event.stopPropagation()">
+      <div class="fm-modal-head"><h2>${initial ? "Modifier la transaction" : "Nouvelle transaction"}</h2><button class="fm-icon-btn" onclick="closeTxModal()">✕</button></div>
+      <div class="fm-form">
+        <label>Type<select id="f-tx-type" onchange="changeTxType(this.value)">${TX_TYPES.map((t) => `<option ${currentType === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Montant (FCFA)<input id="f-tx-montant" type="number" value="${initial?.montant ?? ""}" placeholder="0"></label>
+        <label>${needsDestination(currentType) ? "Compte source" : "Compte"}<select id="f-tx-compte">${accounts.map((a) => `<option value="${a.id}" ${initial?.compteId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select></label>
+        ${needsDestination(currentType) ? `<label>Compte destination<select id="f-tx-dest"><option value="">— Choisir —</option>${accounts.map((a) => `<option value="${a.id}" ${initial?.compteDestinationId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("")}</select></label>` : ""}
+        ${categoryList ? `<label>Catégorie<select id="f-tx-categorie"><option value="">— Choisir —</option>${categoryList.map((c) => `<option ${initial?.categorie === c ? "selected" : ""}>${c}</option>`).join("")}</select></label>` : ""}
+        <label>Date<input id="f-tx-date" type="date" value="${initial?.date || todayStr()}"></label>
+        <label>Description<input id="f-tx-desc" value="${esc(initial?.description || "")}" placeholder="Facultatif"></label>
+        <label>Mode de paiement<select id="f-tx-mode">${PAYMENT_MODES.map((m) => `<option ${initial?.modePaiement === m ? "selected" : ""}>${m}</option>`).join("")}</select></label>
+        <div id="f-tx-err"></div>
+        <div class="fm-form-actions">
+          ${initial ? `<button class="fm-btn-danger" onclick="deleteTx('${initial.id}')">🗑 Supprimer</button>` : "<span></span>"}
+          <button class="fm-btn-primary" onclick="submitTx(${initial ? `'${initial.id}'` : "null"})">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function changeTxType(v) {
+  // preserve in-progress values across re-render by stashing on txModal
+  txModal = txModal || {};
+  txModal._type = v;
+  render();
+}
+function submitTx(id) {
+  const type = document.getElementById("f-tx-type").value;
+  const montant = document.getElementById("f-tx-montant").value;
+  const compteId = document.getElementById("f-tx-compte").value;
+  const destEl = document.getElementById("f-tx-dest");
+  const compteDestinationId = destEl ? destEl.value : null;
+  const catEl = document.getElementById("f-tx-categorie");
+  const errEl = document.getElementById("f-tx-err");
+  if (!montant || isNaN(Number(montant)) || Number(montant) <= 0) { errEl.innerHTML = `<div class="fm-error">⚠ Le montant doit être un nombre positif.</div>`; return; }
+  if (!compteId) { errEl.innerHTML = `<div class="fm-error">⚠ Choisissez un compte.</div>`; return; }
+  if (needsDestination(type) && (!compteDestinationId || compteDestinationId === compteId)) { errEl.innerHTML = `<div class="fm-error">⚠ Choisissez un compte de destination différent.</div>`; return; }
+  const tx = {
+    id: id || uid(), type, montant: Number(montant), compteId,
+    compteDestinationId: needsDestination(type) ? compteDestinationId : null,
+    categorie: needsCategory(type) && catEl ? catEl.value : "",
+    sousCategorie: "", date: document.getElementById("f-tx-date").value,
+    description: document.getElementById("f-tx-desc").value.trim(),
+    modePaiement: document.getElementById("f-tx-mode").value, reference: "", note: "",
+  };
+  const idx = transactions.findIndex((t) => t.id === tx.id);
+  if (idx >= 0) transactions[idx] = tx; else transactions.unshift(tx);
+  saveTransactions();
+  txModal = null;
+  render();
+}
+function deleteTx(id) {
+  if (!confirm("Supprimer cette transaction ?")) return;
+  transactions = transactions.filter((t) => t.id !== id);
+  saveTransactions();
+  txModal = null;
+  render();
+}
+
+/* ---------------------------------- settings modal (export/import/reset) ---------------------------------- */
+function openSettings() { settingsOpen = true; render(); }
+function closeSettings() { settingsOpen = false; render(); }
+function renderSettingsModal() {
+  const overlay = document.createElement("div");
+  overlay.className = "fm-modal-overlay";
+  overlay.onclick = closeSettings;
+  overlay.innerHTML = `
+    <div class="fm-modal" onclick="event.stopPropagation()">
+      <div class="fm-modal-head"><h2>Paramètres</h2><button class="fm-icon-btn" onclick="closeSettings()">✕</button></div>
+      <div class="fm-settings-row">
+        <button class="fm-btn-secondary" onclick="exportData()">⬇ Exporter mes données (JSON)</button>
+        <label class="fm-btn-secondary" style="text-align:center; display:block;">⬆ Importer un fichier JSON
+          <input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])">
+        </label>
+        <button class="fm-btn-danger" style="justify-content:center;" onclick="resetAllData()">🗑 Supprimer toutes les données</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function exportData() {
+  const blob = new Blob([JSON.stringify({ accounts, transactions }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "mon-cockpit-financier-" + todayStr() + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  flashMsg = { type: "ok", text: "Export téléchargé." };
+  closeSettings();
+}
+function importData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.accounts) || !Array.isArray(data.transactions)) throw new Error("format");
+      if (!confirm("Importer remplacera vos données actuelles par celles du fichier. Continuer ?")) return;
+      accounts = data.accounts; transactions = data.transactions;
+      saveAccounts(); saveTransactions();
+      flashMsg = { type: "ok", text: "Import réussi." };
+      closeSettings();
+    } catch (e) {
+      flashMsg = { type: "error", text: "Fichier invalide — import annulé." };
+      render();
+    }
+  };
+  reader.readAsText(file);
+}
+function resetAllData() {
+  if (!confirm("Supprimer définitivement tous vos comptes et transactions ? Cette action est irréversible.")) return;
+  accounts = []; transactions = [];
+  saveAccounts(); saveTransactions();
+  flashMsg = { type: "ok", text: "Toutes les données ont été supprimées." };
+  closeSettings();
+}
+
+/* ---------------------------------- init ---------------------------------- */
+loadState();
+render();
+</script>
+</body>
+</html>
