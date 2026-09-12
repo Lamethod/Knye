@@ -309,6 +309,24 @@ function trySilentDriveReauth() {
   if (client) client.requestAccessToken({ prompt: "" });
 }
 
+function requestDriveTokenSilently() {
+  return new Promise((resolve) => {
+    const client = initDriveTokenClient((resp) => {
+      if (resp.error) { resolve(false); return; }
+      driveAccessToken = resp.access_token;
+      resolve(true);
+    });
+    if (!client) { resolve(false); return; }
+    client.requestAccessToken({ prompt: "" });
+  });
+}
+
+async function ensureDriveToken() {
+  if (driveAccessToken) return true;
+  if (!driveConnected || GOOGLE_CLIENT_ID.startsWith("REMPLACEZ")) return false;
+  return await requestDriveTokenSilently();
+}
+
 async function driveFindFile() {
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=name%3D'${DRIVE_FILE_NAME}'+and+trashed%3Dfalse&spaces=drive&fields=files(id,name,modifiedTime)`,
@@ -377,7 +395,8 @@ async function driveInitialSync() {
 }
 
 async function drivePull() {
-  if (!driveFileId || !driveAccessToken) return;
+  const ok = await ensureDriveToken();
+  if (!ok || !driveFileId) return;
   try {
     const remote = await driveDownloadFile(driveFileId);
     accounts = remote.accounts || [];
@@ -387,7 +406,12 @@ async function drivePull() {
 }
 
 async function drivePush() {
-  if (!driveAccessToken) return;
+  const ok = await ensureDriveToken();
+  if (!ok) {
+    flashMsg = { type: "error", text: "Synchronisation Drive interrompue — reconnectez-vous (⚙ → Connecter Google Drive)." };
+    render();
+    return;
+  }
   try {
     if (!driveFileId) {
       driveFileId = await driveCreateFile(JSON.stringify({ accounts, transactions }));
