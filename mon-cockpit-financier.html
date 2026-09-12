@@ -433,6 +433,7 @@ function computeTotals() {
 
 /* ---------------------------------- rendering ---------------------------------- */
 function render() {
+  document.querySelectorAll(".fm-modal-overlay").forEach((el) => el.remove());
   const app = document.getElementById("app");
   const t = computeTotals();
   app.innerHTML = `
